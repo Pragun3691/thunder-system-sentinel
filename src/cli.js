@@ -61,11 +61,14 @@ async function main() {
     },
   });
 
-  if (values.help) {
+ if (values.help) {
     showHelp();
     return;
   }
 
+  if (!["text", "json"].includes(values.format)) {
+    throw new Error(`Unsupported output format: ${values.format}`);
+  }
   const [command = "info", fileName] = positionals;
 
   switch (command) {
