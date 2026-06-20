@@ -5,9 +5,15 @@ A safe Node.js command-line tool that collects system information, displays sele
 ## Features
 
 - Collects operating system type, release, and version
-- Displays CPU architecture, model, and logical cores
+- Displays CPU architecture, model, logical cores, and real sampled CPU usage
+- Samples CPU activity from two `os.cpus()` snapshots taken about 200ms apart
 - Shows hostname, platform, home directory, and Node.js version
-- Reports memory usage and system uptime
+- Reports total, free, used, and percentage memory usage
+- Shows load averages from `os.loadavg()` with graceful Windows handling
+- Shows a safe network summary with interface name, address family, and internal status
+- Omits MAC addresses and other unnecessary network identifiers
+- Evaluates overall health as healthy, warning, critical, or unknown and reports CPU/memory statuses
+- Explains warning and critical health reasons using clear threshold messages
 - Uses an allowlist for safe environment-variable collection
 - Supports text and JSON output
 - Creates, reads, updates, lists, and deletes code files
@@ -82,26 +88,59 @@ node src/cli.js delete example.js
 npm start -- --help
 ```
 
+## Output
+
+The default text report includes:
+
+- Operating system details
+- CPU details and sampled CPU usage percentage
+- Memory totals, used bytes, and memory usage percentage
+- Load averages for 1, 5, and 15 minutes
+- Safe network interface summaries without MAC addresses
+- Health status and warning reasons
+- Machine, runtime, uptime, and selected environment details
+
+JSON output includes the same information structurally:
+
+- `generatedAt`
+- `system.operatingSystem`
+- `system.cpu`
+- `system.memory`
+- `system.loadAverages`
+- `system.network`
+- `system.machine`
+- `system.runtime`
+- `health`
+- `environment`
+
+Unavailable values are represented as `Unavailable` in text-oriented fields, and unsupported load averages include a note.
+
 ## Code Flow
 
 ```mermaid
 flowchart TD
     A["CLI receives command"] --> B{"Command type"}
-    B -->|info| C["Collect system and environment data"]
-    B -->|CRUD| D["Validate file path and extension"]
-    C --> E["Format as text or JSON"]
-    D --> F["Perform operation inside workspace"]
-    E --> G["Display result"]
-    F --> G
+    B -->|info| C["Collect system data asynchronously"]
+    C --> D["Sample CPU snapshots about 200ms apart"]
+    D --> E["Analyze CPU and memory health"]
+    E --> F["Collect selected environment data"]
+    F --> G["Format as text or JSON"]
+    B -->|CRUD| H["Validate file path and extension"]
+    H --> I["Perform operation inside workspace"]
+    G --> J["Display result"]
+    I --> J
 ```
 
 1. `src/cli.js` parses the command and options.
-2. The `info` command calls the system and environment collectors.
-3. The formatter converts the report into text or JSON.
-4. File commands are passed to the file manager.
-5. The file manager validates the path and extension.
-6. The requested operation runs only inside `workspace`.
-7. Success or a clear error message is displayed.
+2. The `info` command awaits the asynchronous system collector.
+3. `src/systemInfo.js` samples real CPU usage, memory, load averages, network summaries, machine details, and runtime details.
+4. `src/healthAnalyzer.js` evaluates CPU and memory usage against warning and critical thresholds.
+5. The environment collector reads only allowlisted variables.
+6. The formatter converts the full report into text or JSON.
+7. File commands are passed to the file manager.
+8. The file manager validates the path and extension.
+9. The requested file operation runs only inside `workspace`.
+10. Success or a clear error message is displayed.
 
 ## Strategy
 
@@ -111,6 +150,7 @@ The project is divided into small modules with one responsibility each:
 |---|---|
 | `cli.js` | Parses commands and coordinates the application |
 | `systemInfo.js` | Collects system and runtime information |
+| `healthAnalyzer.js` | Evaluates CPU and memory health thresholds |
 | `environment.js` | Reads only approved environment variables |
 | `fileManager.js` | Performs validated CRUD operations |
 | `formatter.js` | Produces readable text and JSON output |
@@ -124,6 +164,7 @@ Although the challenge uses the word "virus," this project is intentionally a tr
 - It does not spread, hide, persist, or communicate over a network.
 - It never collects passwords, tokens, API keys, or the complete environment.
 - Environment variables are selected through a fixed allowlist.
+- Network output excludes MAC addresses and actual IP addresses.
 - Absolute paths and path traversal attempts are rejected.
 - Files can be modified only inside the local `workspace` directory.
 - Only common code and text file extensions are accepted.
@@ -161,6 +202,8 @@ The tests cover:
 - Required system information
 - Environment-variable allowlisting
 - Text and JSON formatting
+- CPU, memory, load average, network, and health dashboard fields
+- Deterministic health threshold analysis
 - Complete file CRUD workflow
 - Duplicate and missing files
 - Path traversal protection
@@ -170,19 +213,21 @@ The tests cover:
 
 ```text
 thunder-system-sentinel/
-├── src/
-│   ├── cli.js
-│   ├── environment.js
-│   ├── fileManager.js
-│   ├── formatter.js
-│   └── systemInfo.js
-├── tests/
-│   ├── fileManager.test.js
-│   ├── formatter.test.js
-│   └── systemInfo.test.js
-├── workspace/
-├── package.json
-└── README.md
+|-- src/
+|   |-- cli.js
+|   |-- environment.js
+|   |-- fileManager.js
+|   |-- formatter.js
+|   |-- healthAnalyzer.js
+|   `-- systemInfo.js
+|-- tests/
+|   |-- fileManager.test.js
+|   |-- formatter.test.js
+|   |-- healthAnalyzer.test.js
+|   `-- systemInfo.test.js
+|-- workspace/
+|-- package.json
+`-- README.md
 ```
 
 ## License

@@ -3,6 +3,7 @@
 import { parseArgs } from "node:util";
 import { collectSystemInfo } from "./systemInfo.js";
 import { collectEnvironmentVariables } from "./environment.js";
+import { analyzeHealth } from "./healthAnalyzer.js";
 import {
   createCodeFile,
   deleteCodeFile,
@@ -61,7 +62,7 @@ async function main() {
     },
   });
 
- if (values.help) {
+  if (values.help) {
     showHelp();
     return;
   }
@@ -73,9 +74,12 @@ async function main() {
 
   switch (command) {
     case "info": {
+      const system = await collectSystemInfo();
+
       const report = {
         generatedAt: new Date().toISOString(),
-        system: collectSystemInfo(),
+        system,
+        health: analyzeHealth(system),
         environment: collectEnvironmentVariables(),
       };
 
