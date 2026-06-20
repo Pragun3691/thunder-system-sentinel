@@ -1,15 +1,19 @@
 {
   "name": "thunder-system-sentinel",
   "version": "1.0.0",
-  "description": "",
+  "description": "A safe Node.js CLI for system inspection and code-file CRUD operations",
   "main": "src/cli.js",
   "scripts": {
     "test": "node --test",
     "start": "node src/cli.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "nodejs",
+    "cli",
+    "system-information"
+  ],
+  "author": "Pragun",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "system-sentinel": "src/cli.js"
