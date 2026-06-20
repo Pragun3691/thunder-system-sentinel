@@ -94,7 +94,11 @@ export async function listCodeFiles() {
   });
 
   return entries
-    .filter((entry) => entry.isFile())
+   .filter(
+  (entry) =>
+    entry.isFile() &&
+    ALLOWED_EXTENSIONS.has(path.extname(entry.name).toLowerCase()),
+)
     .map((entry) =>
       path.relative(WORKSPACE_ROOT, path.join(entry.parentPath, entry.name)),
     );
