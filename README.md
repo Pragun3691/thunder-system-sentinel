@@ -1,5 +1,7 @@
 # Thunder System Sentinel
 
+[![CI](https://github.com/Pragun3691/thunder-system-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/Pragun3691/thunder-system-sentinel/actions/workflows/ci.yml)
+
 A safe Node.js command-line tool that collects system information, displays selected environment variables, and performs CRUD operations on code files inside a restricted workspace.
 
 ## Features
