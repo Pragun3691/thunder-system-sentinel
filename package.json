@@ -4,6 +4,7 @@
   "description": "A safe Node.js CLI for system inspection and code-file CRUD operations",
   "main": "src/cli.js",
   "scripts": {
+    "demo": "node scripts/demo.js",
     "test": "node --test",
     "start": "node src/cli.js"
   },

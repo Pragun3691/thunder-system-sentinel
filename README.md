@@ -44,6 +44,16 @@ cd thunder-system-sentinel
 npm start
 ```
 
+## Run The Demo
+
+```bash
+npm run demo
+```
+
+The demo copies the CLI into an isolated temporary project, runs every command there, and removes the temporary project afterward. It never writes to the repository's real `workspace` or `.sentinel` directories.
+
+The numbered walkthrough showcases the system-health report, quoted-content file CRUD, before/after snapshots, SHA-256 baseline creation, expected integrity-drift detection, and snapshot comparison.
+
 ### Windows / PowerShell note
 
 If PowerShell blocks npm scripts with an execution-policy error (`npm.ps1 cannot be loaded`), run npm through `cmd.exe`:
@@ -358,6 +368,8 @@ Thunder System Sentinel combines practical system diagnostics, repeatable snapsh
 
 ```text
 thunder-system-sentinel/
+|-- scripts/
+|   `-- demo.js
 |-- src/
 |   |-- cli.js
 |   |-- environment.js
