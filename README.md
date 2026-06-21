@@ -345,6 +345,8 @@ The tests cover:
 - Path traversal protection
 - Symlink and nested junction escape protection, with graceful `EPERM` skips where link creation is unavailable
 - Unsupported extensions
+- Real child-process CLI execution covering arguments, stdout, stderr, JSON, and exit codes
+- Isolated CLI lifecycle tests that copy `src` into temporary projects so real workspace and `.sentinel` data remain untouched
 
 GitHub Actions runs the complete test suite on both Windows and Linux with Node.js 20 and 22.
 
@@ -366,6 +368,7 @@ thunder-system-sentinel/
 |   |-- snapshotManager.js
 |   `-- systemInfo.js
 |-- tests/
+|   |-- cli.integration.test.js
 |   |-- fileManager.test.js
 |   |-- formatter.test.js
 |   |-- healthAnalyzer.test.js
