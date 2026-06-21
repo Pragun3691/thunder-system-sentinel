@@ -5,13 +5,25 @@ import { collectSystemInfo } from "./systemInfo.js";
 import { collectEnvironmentVariables } from "./environment.js";
 import { analyzeHealth } from "./healthAnalyzer.js";
 import {
+  compareSnapshots,
+  deleteSnapshot,
+  listSnapshots,
+  saveSnapshot,
+  loadSnapshot,
+} from "./snapshotManager.js";
+import {
   createCodeFile,
   deleteCodeFile,
   listCodeFiles,
   readCodeFile,
   updateCodeFile,
 } from "./fileManager.js";
-import { formatReport } from "./formatter.js";
+import {
+  formatReport,
+  formatSnapshot,
+  formatSnapshotComparison,
+  formatSnapshotList,
+} from "./formatter.js";
 
 function showHelp() {
   console.log(`
@@ -20,6 +32,11 @@ System Sentinel
 Usage:
   npm start -- info
   npm start -- info --format json
+  npm start -- snapshot save <name>
+  npm start -- snapshot list
+  npm start -- snapshot show <name>
+  npm start -- snapshot compare <firstName> <secondName>
+  npm start -- snapshot delete <name>
   npm start -- create <file> --content "<code>"
   npm start -- read <file>
   npm start -- update <file> --content "<code>"
@@ -40,6 +57,106 @@ function printOperation(operation, result, format) {
   }
 
   console.log(result);
+}
+
+async function collectReport() {
+  const system = await collectSystemInfo();
+
+  return {
+    generatedAt: new Date().toISOString(),
+    system,
+    health: analyzeHealth(system),
+    environment: collectEnvironmentVariables(),
+  };
+}
+
+function requireArgument(value, message) {
+  if (!value) {
+    throw new Error(message);
+  }
+
+  return value;
+}
+
+function formatSnapshotSave(snapshot, format) {
+  const result = {
+    name: snapshot.name,
+    createdAt: snapshot.generatedAt,
+    platform: snapshot.system?.machine?.platform ?? "Unavailable",
+    health: snapshot.health?.overallStatus ?? "Unavailable",
+  };
+
+  if (format === "json") {
+    return JSON.stringify(
+      {
+        success: true,
+        operation: "snapshot save",
+        result,
+      },
+      null,
+      2,
+    );
+  }
+
+  return [
+    `Snapshot saved: ${result.name}`,
+    `Created at: ${result.createdAt}`,
+    `Platform: ${result.platform}`,
+    `Health: ${result.health}`,
+  ].join("\n");
+}
+
+function formatSnapshotDelete(result, format) {
+  if (format === "json") {
+    return JSON.stringify(
+      {
+        success: true,
+        operation: "snapshot delete",
+        result,
+      },
+      null,
+      2,
+    );
+  }
+
+  return `Snapshot deleted: ${result.name}`;
+}
+
+async function handleSnapshotCommand(action, firstName, secondName, format) {
+  switch (action) {
+    case "save": {
+      const name = requireArgument(firstName, "A snapshot name is required.");
+      const snapshot = await saveSnapshot(name, await collectReport());
+      console.log(formatSnapshotSave(snapshot, format));
+      break;
+    }
+
+    case "list":
+      console.log(formatSnapshotList(await listSnapshots(), format));
+      break;
+
+    case "show": {
+      const name = requireArgument(firstName, "A snapshot name is required.");
+      console.log(formatSnapshot(await loadSnapshot(name), format));
+      break;
+    }
+
+    case "compare": {
+      const first = requireArgument(firstName, "The first snapshot name is required.");
+      const second = requireArgument(secondName, "The second snapshot name is required.");
+      console.log(formatSnapshotComparison(await compareSnapshots(first, second), format));
+      break;
+    }
+
+    case "delete": {
+      const name = requireArgument(firstName, "A snapshot name is required.");
+      console.log(formatSnapshotDelete(await deleteSnapshot(name), format));
+      break;
+    }
+
+    default:
+      throw new Error(`Unknown snapshot command: ${action ?? "none"}`);
+  }
 }
 
 async function main() {
@@ -70,27 +187,22 @@ async function main() {
   if (!["text", "json"].includes(values.format)) {
     throw new Error(`Unsupported output format: ${values.format}`);
   }
-  const [command = "info", fileName] = positionals;
+  const [command = "info", firstArg, secondArg, thirdArg] = positionals;
 
   switch (command) {
     case "info": {
-      const system = await collectSystemInfo();
-
-      const report = {
-        generatedAt: new Date().toISOString(),
-        system,
-        health: analyzeHealth(system),
-        environment: collectEnvironmentVariables(),
-      };
-
-      console.log(formatReport(report, values.format));
+      console.log(formatReport(await collectReport(), values.format));
       break;
     }
+
+    case "snapshot":
+      await handleSnapshotCommand(firstArg, secondArg, thirdArg, values.format);
+      break;
 
     case "create":
       printOperation(
         "create",
-        await createCodeFile(fileName, values.content ?? ""),
+        await createCodeFile(firstArg, values.content ?? ""),
         values.format,
       );
       break;
@@ -98,7 +210,7 @@ async function main() {
     case "read":
       printOperation(
         "read",
-        await readCodeFile(fileName),
+        await readCodeFile(firstArg),
         values.format,
       );
       break;
@@ -106,7 +218,7 @@ async function main() {
     case "update":
       printOperation(
         "update",
-        await updateCodeFile(fileName, values.content ?? ""),
+        await updateCodeFile(firstArg, values.content ?? ""),
         values.format,
       );
       break;
@@ -114,7 +226,7 @@ async function main() {
     case "delete":
       printOperation(
         "delete",
-        await deleteCodeFile(fileName),
+        await deleteCodeFile(firstArg),
         values.format,
       );
       break;
@@ -134,7 +246,13 @@ async function main() {
 try {
   await main();
 } catch (error) {
-  if (error.code === "ENOENT") {
+  const isSnapshotError =
+    typeof error.message === "string" &&
+    error.message.toLowerCase().includes("snapshot");
+
+  if (isSnapshotError) {
+    console.error(`Error: ${error.message}`);
+  } else if (error.code === "ENOENT") {
     console.error("Error: The requested file does not exist.");
   } else if (error.code === "EEXIST") {
     console.error("Error: The file already exists.");

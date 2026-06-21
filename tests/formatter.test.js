@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatReport } from "../src/formatter.js";
+import {
+  formatReport,
+  formatSnapshot,
+  formatSnapshotComparison,
+  formatSnapshotList,
+} from "../src/formatter.js";
 
 const report = {
   generatedAt: "2026-06-20T00:00:00.000Z",
@@ -104,5 +109,92 @@ test("rejects an unsupported output format", () => {
   assert.throws(
     () => formatReport(report, "xml"),
     /Unsupported output format/,
+  );
+});
+
+test("formats snapshot show output as text and JSON", () => {
+  const snapshot = {
+    schemaVersion: 1,
+    name: "daily",
+    ...report,
+  };
+
+  const textOutput = formatSnapshot(snapshot, "text");
+  assert.match(textOutput, /SNAPSHOT REPORT/);
+  assert.match(textOutput, /Name: daily/);
+  assert.match(textOutput, /Schema version: 1/);
+  assert.match(textOutput, /SYSTEM SENTINEL REPORT/);
+
+  assert.deepEqual(JSON.parse(formatSnapshot(snapshot, "json")), snapshot);
+});
+
+test("formats snapshot lists", () => {
+  const snapshots = [
+    {
+      name: "daily",
+      createdAt: "2026-06-20T00:00:00.000Z",
+      platform: "linux",
+      health: "healthy",
+    },
+  ];
+
+  const textOutput = formatSnapshotList(snapshots, "text");
+  assert.match(textOutput, /SNAPSHOTS/);
+  assert.match(textOutput, /daily/);
+  assert.match(textOutput, /Created at/);
+
+  assert.equal(formatSnapshotList([], "text"), "No snapshots found.");
+  assert.deepEqual(JSON.parse(formatSnapshotList(snapshots, "json")), snapshots);
+});
+
+test("formats snapshot comparison output", () => {
+  const comparison = {
+    firstName: "before",
+    secondName: "after",
+    changes: [
+      {
+        type: "added",
+        path: "environment.NEW_ONLY",
+        before: null,
+        after: "after",
+      },
+      {
+        type: "removed",
+        path: "environment.OLD_ONLY",
+        before: "before",
+        after: null,
+      },
+      {
+        type: "changed",
+        path: "system.cpu.usagePercent",
+        before: 25,
+        after: 50,
+      },
+    ],
+  };
+
+  const textOutput = formatSnapshotComparison(comparison, "text");
+  assert.match(textOutput, /SNAPSHOT COMPARISON: before -> after/);
+  assert.match(textOutput, /Added Values/);
+  assert.match(textOutput, /ADDED environment.NEW_ONLY/);
+  assert.match(textOutput, /Removed Values/);
+  assert.match(textOutput, /REMOVED environment.OLD_ONLY/);
+  assert.match(textOutput, /Changed Values/);
+  assert.match(textOutput, /CHANGED system.cpu.usagePercent: 25 -> 50/);
+
+  assert.deepEqual(JSON.parse(formatSnapshotComparison(comparison, "json")), comparison);
+});
+
+test("formats no-difference snapshot comparisons clearly", () => {
+  assert.equal(
+    formatSnapshotComparison(
+      {
+        firstName: "first",
+        secondName: "second",
+        changes: [],
+      },
+      "text",
+    ),
+    "No differences found between first and second.",
   );
 });

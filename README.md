@@ -16,6 +16,9 @@ A safe Node.js command-line tool that collects system information, displays sele
 - Explains warning and critical health reasons using clear threshold messages
 - Uses an allowlist for safe environment-variable collection
 - Supports text and JSON output
+- Saves system report snapshots under `.sentinel/snapshots/`
+- Lists, shows, compares, and deletes named snapshots
+- Compares snapshot content with added, removed, and changed values
 - Creates, reads, updates, lists, and deletes code files
 - Restricts file operations to the `workspace` directory
 - Handles missing files, duplicate files, and invalid input
@@ -37,6 +40,22 @@ cd thunder-system-sentinel
 npm start
 ```
 
+### Windows / PowerShell note
+
+If PowerShell blocks npm scripts with an execution-policy error (`npm.ps1 cannot be loaded`), run npm through `cmd.exe`:
+
+```powershell
+cmd.exe /d /c npm.cmd test
+cmd.exe /d /c npm.cmd start -- info
+```
+
+Or skip npm and call the CLI directly (works in any shell):
+
+```powershell
+node src/cli.js info
+node src/cli.js snapshot save morning_check
+```
+
 ## Commands
 
 ### Display system information
@@ -50,6 +69,39 @@ npm start -- info
 
 ```bash
 npm start -- info --format json
+```
+
+### Save a system report snapshot
+
+```bash
+npm start -- snapshot save morning_check
+```
+
+### List saved snapshots
+
+```bash
+npm start -- snapshot list
+npm start -- snapshot list --format json
+```
+
+### Show a saved snapshot
+
+```bash
+npm start -- snapshot show morning_check
+npm start -- snapshot show morning_check --format json
+```
+
+### Compare two snapshots
+
+```bash
+npm start -- snapshot compare morning_check evening_check
+npm start -- snapshot compare morning_check evening_check --format json
+```
+
+### Delete a snapshot
+
+```bash
+npm start -- snapshot delete morning_check
 ```
 
 ### Create a code file
@@ -115,6 +167,24 @@ JSON output includes the same information structurally:
 
 Unavailable values are represented as `Unavailable` in text-oriented fields, and unsupported load averages include a note.
 
+## Snapshot Storage
+
+Snapshots are stored as JSON files in `.sentinel/snapshots/`.
+
+Each snapshot uses `schemaVersion: 1` and contains:
+
+- `name`
+- `generatedAt`
+- `system`
+- `health`
+- `environment`
+
+Snapshot names may contain only letters, numbers, hyphens, and underscores, up to 64 characters. The CLI rejects absolute paths, path traversal, duplicate names, corrupt JSON, missing snapshots, and unsupported schema versions.
+
+Snapshot writes are atomic: the CLI writes a temporary file in the snapshot directory and links it into place only after the JSON payload has been fully written.
+
+`snapshot list` returns each snapshot's name, creation time, platform, and overall health. `snapshot compare` ignores snapshot metadata such as name, schema version, and generation time, then reports content differences with `path`, `before`, and `after` fields.
+
 ## Code Flow
 
 ```mermaid
@@ -127,8 +197,17 @@ flowchart TD
     F --> G["Format as text or JSON"]
     B -->|CRUD| H["Validate file path and extension"]
     H --> I["Perform operation inside workspace"]
+    B -->|snapshot| K{"Snapshot command"}
+    K -->|save| L["Collect report and write atomic snapshot"]
+    K -->|list/show| M["Read and validate stored snapshots"]
+    K -->|compare| N["Load snapshots and compare report content"]
+    K -->|delete| O["Validate name and remove snapshot file"]
     G --> J["Display result"]
     I --> J
+    L --> J
+    M --> J
+    N --> J
+    O --> J
 ```
 
 1. `src/cli.js` parses the command and options.
@@ -140,7 +219,9 @@ flowchart TD
 7. File commands are passed to the file manager.
 8. The file manager validates the path and extension.
 9. The requested file operation runs only inside `workspace`.
-10. Success or a clear error message is displayed.
+10. Snapshot commands validate names and operate only inside `.sentinel/snapshots/`.
+11. Snapshot files are parsed and schema-checked before being shown, listed, or compared.
+12. Success or a clear error message is displayed.
 
 ## Strategy
 
@@ -152,6 +233,7 @@ The project is divided into small modules with one responsibility each:
 | `systemInfo.js` | Collects system and runtime information |
 | `healthAnalyzer.js` | Evaluates CPU and memory health thresholds |
 | `environment.js` | Reads only approved environment variables |
+| `snapshotManager.js` | Stores, validates, compares, and deletes report snapshots |
 | `fileManager.js` | Performs validated CRUD operations |
 | `formatter.js` | Produces readable text and JSON output |
 
@@ -165,6 +247,9 @@ Although the challenge uses the word "virus," this project is intentionally a tr
 - It never collects passwords, tokens, API keys, or the complete environment.
 - Environment variables are selected through a fixed allowlist.
 - Network output excludes MAC addresses and actual IP addresses.
+- Snapshot files are stored under `.sentinel/snapshots/`, which is ignored by Git.
+- Snapshot names are restricted to safe characters and resolved inside the snapshot directory.
+- Snapshot writes are atomic to avoid partially written final files.
 - Absolute paths and path traversal attempts are rejected.
 - Files can be modified only inside the local `workspace` directory.
 - Only common code and text file extensions are accepted.
@@ -182,6 +267,10 @@ The CLI also handles:
 - Unknown commands
 - Invalid output formats
 - Attempts to access files outside the workspace
+- Invalid snapshot names
+- Corrupt snapshot JSON
+- Unsupported snapshot schema versions
+- Missing snapshots
 
 Errors produce a non-zero process exit code.
 
@@ -204,6 +293,10 @@ The tests cover:
 - Text and JSON formatting
 - CPU, memory, load average, network, and health dashboard fields
 - Deterministic health threshold analysis
+- Snapshot save, list, show, compare, and delete workflows
+- Duplicate, invalid, missing, corrupt, and unsupported snapshot cases
+- No-difference snapshot comparisons
+- Injected snapshot storage directories so tests never write to real `.sentinel`
 - Complete file CRUD workflow
 - Duplicate and missing files
 - Path traversal protection
@@ -219,11 +312,13 @@ thunder-system-sentinel/
 |   |-- fileManager.js
 |   |-- formatter.js
 |   |-- healthAnalyzer.js
+|   |-- snapshotManager.js
 |   `-- systemInfo.js
 |-- tests/
 |   |-- fileManager.test.js
 |   |-- formatter.test.js
 |   |-- healthAnalyzer.test.js
+|   |-- snapshotManager.test.js
 |   `-- systemInfo.test.js
 |-- workspace/
 |-- package.json

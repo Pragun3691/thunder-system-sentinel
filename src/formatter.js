@@ -57,6 +57,14 @@ function formatHealthMetric(metric) {
   return `${formatStatus(metric?.status)} (${formatPercent(metric?.usagePercent)})`;
 }
 
+function formatValue(value) {
+  if (typeof value === "string") return JSON.stringify(value);
+  if (value === null) return "null";
+  if (typeof value === "undefined") return "undefined";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
 function formatNetworkInterfaces(network) {
   return (network?.interfaces ?? []).map((networkInterface) => {
     const internalStatus = formatBoolean(
@@ -140,5 +148,98 @@ export function formatReport(report, format = "text") {
       "Selected Environment Variables",
       Object.entries(environment),
     ),
+  ].join("\n");
+}
+
+export function formatSnapshot(snapshot, format = "text") {
+  if (format === "json") {
+    return JSON.stringify(snapshot, null, 2);
+  }
+
+  if (format !== "text") {
+    throw new Error(`Unsupported output format: ${format}`);
+  }
+
+  return [
+    "SNAPSHOT REPORT",
+    `Name: ${snapshot.name}`,
+    `Schema version: ${snapshot.schemaVersion}`,
+    formatReport(snapshot, "text"),
+  ].join("\n");
+}
+
+export function formatSnapshotList(snapshots, format = "text") {
+  if (format === "json") {
+    return JSON.stringify(snapshots, null, 2);
+  }
+
+  if (format !== "text") {
+    throw new Error(`Unsupported output format: ${format}`);
+  }
+
+  if (snapshots.length === 0) {
+    return "No snapshots found.";
+  }
+
+  const headers = ["Name", "Created at", "Platform", "Health"];
+  const rows = snapshots.map((snapshot) => [
+    snapshot.name,
+    snapshot.createdAt,
+    snapshot.platform,
+    snapshot.health,
+  ]);
+  const widths = headers.map((header, index) =>
+    Math.max(header.length, ...rows.map((row) => String(row[index]).length)),
+  );
+  const formatRow = (row) =>
+    row.map((cell, index) => String(cell).padEnd(widths[index])).join(" | ");
+
+  return [
+    "SNAPSHOTS",
+    "---------",
+    formatRow(headers),
+    widths.map((width) => "-".repeat(width)).join("-|-"),
+    ...rows.map(formatRow),
+  ].join("\n");
+}
+
+function formatSnapshotChange(change) {
+  if (change.type === "added") {
+    return `- ADDED ${change.path}: ${formatValue(change.after)}`;
+  }
+
+  if (change.type === "removed") {
+    return `- REMOVED ${change.path}: ${formatValue(change.before)}`;
+  }
+
+  return `- CHANGED ${change.path}: ${formatValue(change.before)} -> ${formatValue(change.after)}`;
+}
+
+export function formatSnapshotComparison(comparison, format = "text") {
+  if (format === "json") {
+    return JSON.stringify(comparison, null, 2);
+  }
+
+  if (format !== "text") {
+    throw new Error(`Unsupported output format: ${format}`);
+  }
+
+  if (comparison.changes.length === 0) {
+    return `No differences found between ${comparison.firstName} and ${comparison.secondName}.`;
+  }
+
+  const sections = [
+    ["Added Values", comparison.changes.filter((change) => change.type === "added")],
+    ["Removed Values", comparison.changes.filter((change) => change.type === "removed")],
+    ["Changed Values", comparison.changes.filter((change) => change.type === "changed")],
+  ]
+    .filter(([, changes]) => changes.length > 0)
+    .map(([title, changes]) =>
+      [`\n${title}`, "-".repeat(title.length), ...changes.map(formatSnapshotChange)].join("\n"),
+    );
+
+  return [
+    `SNAPSHOT COMPARISON: ${comparison.firstName} -> ${comparison.secondName}`,
+    ...sections,
   ].join("\n");
 }
