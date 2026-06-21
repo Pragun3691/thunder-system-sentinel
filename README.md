@@ -2,7 +2,11 @@
 
 [![CI](https://github.com/Pragun3691/thunder-system-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/Pragun3691/thunder-system-sentinel/actions/workflows/ci.yml)
 
-A safe Node.js command-line tool that collects system information, displays selected environment variables, and performs CRUD operations on code files inside a restricted workspace.
+Inspect your system, manage code files safely, capture system snapshots, and
+detect workspace tampering from one dependency-free Node.js CLI.
+
+Built for Thunder Hackathon 3.0 as a defensive interpretation of "Create a
+Virus in JS": transparent, local-only, and restricted to its workspace.
 
 ## Features
 
