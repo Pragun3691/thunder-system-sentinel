@@ -246,9 +246,7 @@ async function main() {
 try {
   await main();
 } catch (error) {
-  const isSnapshotError =
-    typeof error.message === "string" &&
-    error.message.toLowerCase().includes("snapshot");
+  const isSnapshotError = error.isSnapshotError === true;
 
   if (isSnapshotError) {
     console.error(`Error: ${error.message}`);

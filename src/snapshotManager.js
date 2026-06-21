@@ -26,6 +26,7 @@ const MISSING = Symbol("missing");
 function snapshotError(message, code) {
   const error = new Error(message);
   error.code = code;
+  error.isSnapshotError = true;
   return error;
 }
 
