@@ -21,8 +21,10 @@ A safe Node.js command-line tool that collects system information, displays sele
 - Saves system report snapshots under `.sentinel/snapshots/`
 - Lists, shows, compares, and deletes named snapshots
 - Compares snapshot content with added, removed, and changed values
+- Creates SHA-256 integrity baselines for workspace files
+- Detects added, removed, and modified files against the saved baseline
 - Creates, reads, updates, lists, and deletes code files
-- Restricts file operations to the `workspace` directory
+- Restricts file operations to the real `workspace` directory, including through links and junctions
 - Handles missing files, duplicate files, and invalid input
 - Includes automated tests using Node.js's built-in test runner
 
@@ -56,6 +58,7 @@ Or skip npm and call the CLI directly (works in any shell):
 ```powershell
 node src/cli.js info
 node src/cli.js snapshot save morning_check
+node src/cli.js integrity check
 ```
 
 ## Commands
@@ -104,6 +107,20 @@ npm start -- snapshot compare morning_check evening_check --format json
 
 ```bash
 npm start -- snapshot delete morning_check
+```
+
+### Create an integrity baseline
+
+```bash
+npm start -- integrity baseline
+npm start -- integrity baseline --format json
+```
+
+### Check workspace integrity
+
+```bash
+npm start -- integrity check
+npm start -- integrity check --format json
 ```
 
 ### Create a code file
@@ -187,6 +204,14 @@ Snapshot writes are atomic: the CLI writes a temporary file in the snapshot dire
 
 `snapshot list` returns each snapshot's name, creation time, platform, and overall health. `snapshot compare` ignores snapshot metadata such as name, schema version, and generation time, then reports content differences with `path`, `before`, and `after` fields.
 
+## Integrity Baselines
+
+`integrity baseline` reads every file in `workspace`, calculates a SHA-256 digest and byte size, and stores the resulting manifest in `.sentinel/integrity/baseline.json`. SHA-256 turns each file's bytes into a stable 256-bit fingerprint: changing the file changes its digest, while the original file contents are not copied into the baseline.
+
+The baseline records its schema version, hash algorithm, generation time, file count, and portable relative file paths. It is written atomically through a temporary file and rename; temporary files are cleaned up if writing or renaming fails.
+
+`integrity check` creates a fresh in-memory manifest and compares it with the stored baseline. It reports files as added, removed, modified, or unchanged. A clean check exits with code `0`; detected drift is still printed normally but sets exit code `1`, making the command useful in scripts and CI. Invalid or corrupt baseline metadata is rejected before comparison.
+
 ## Code Flow
 
 ```mermaid
@@ -198,18 +223,23 @@ flowchart TD
     E --> F["Collect selected environment data"]
     F --> G["Format as text or JSON"]
     B -->|CRUD| H["Validate file path and extension"]
-    H --> I["Perform operation inside workspace"]
+    H --> I["Resolve real paths and perform operation inside workspace"]
     B -->|snapshot| K{"Snapshot command"}
     K -->|save| L["Collect report and write atomic snapshot"]
     K -->|list/show| M["Read and validate stored snapshots"]
     K -->|compare| N["Load snapshots and compare report content"]
     K -->|delete| O["Validate name and remove snapshot file"]
+    B -->|integrity| P{"Integrity command"}
+    P -->|baseline| Q["Hash workspace files and atomically store manifest"]
+    P -->|check| R["Validate baseline and detect file drift"]
     G --> J["Display result"]
     I --> J
     L --> J
     M --> J
     N --> J
     O --> J
+    Q --> J
+    R --> J
 ```
 
 1. `src/cli.js` parses the command and options.
@@ -219,11 +249,12 @@ flowchart TD
 5. The environment collector reads only allowlisted variables.
 6. The formatter converts the full report into text or JSON.
 7. File commands are passed to the file manager.
-8. The file manager validates the path and extension.
-9. The requested file operation runs only inside `workspace`.
+8. The file manager validates the lexical path, extension, canonical workspace root, and real target or parent path.
+9. The requested file operation runs only inside the real `workspace`, even when links or junctions are present.
 10. Snapshot commands validate names and operate only inside `.sentinel/snapshots/`.
 11. Snapshot files are parsed and schema-checked before being shown, listed, or compared.
-12. Success or a clear error message is displayed.
+12. Integrity commands create or validate a SHA-256 manifest and compare current files with the baseline.
+13. Success or a clear error message is displayed.
 
 ## Strategy
 
@@ -236,7 +267,8 @@ The project is divided into small modules with one responsibility each:
 | `healthAnalyzer.js` | Evaluates CPU and memory health thresholds |
 | `environment.js` | Reads only approved environment variables |
 | `snapshotManager.js` | Stores, validates, compares, and deletes report snapshots |
-| `fileManager.js` | Performs validated CRUD operations |
+| `integrityManager.js` | Creates, validates, stores, and checks SHA-256 baselines |
+| `fileManager.js` | Performs path- and real-path-validated CRUD operations |
 | `formatter.js` | Produces readable text and JSON output |
 
 This separation makes the program easier to test, maintain, and extend.
@@ -253,9 +285,11 @@ Although the challenge uses the word "virus," this project is intentionally a tr
 - Snapshot names are restricted to safe characters and resolved inside the snapshot directory.
 - Snapshot writes are atomic to avoid partially written final files.
 - Absolute paths and path traversal attempts are rejected.
-- Files can be modified only inside the local `workspace` directory.
+- Existing file targets and parent directories are resolved to their real paths before CRUD operations.
+- Symlink, junction, and reparse-point redirects outside the local `workspace` directory are rejected.
 - Only common code and text file extensions are accepted.
 - Existing files cannot be overwritten by the `create` command.
+- Integrity baselines store hashes and sizes, not copies of workspace file contents.
 
 ## Missing Values and Errors
 
@@ -273,6 +307,9 @@ The CLI also handles:
 - Corrupt snapshot JSON
 - Unsupported snapshot schema versions
 - Missing snapshots
+- Missing or corrupt integrity baselines
+- Invalid integrity metadata or unsafe manifest paths
+- Workspace integrity drift
 
 Errors produce a non-zero process exit code.
 
@@ -299,10 +336,21 @@ The tests cover:
 - Duplicate, invalid, missing, corrupt, and unsupported snapshot cases
 - No-difference snapshot comparisons
 - Injected snapshot storage directories so tests never write to real `.sentinel`
+- Integrity baseline creation and SHA-256 drift detection
+- Added, removed, modified, unchanged, and portable nested-path cases
+- Invalid integrity dates, counts, sizes, hashes, algorithms, paths, and schema versions
+- Temporary integrity-file cleanup after an atomic-write failure
 - Complete file CRUD workflow
 - Duplicate and missing files
 - Path traversal protection
+- Symlink and nested junction escape protection, with graceful `EPERM` skips where link creation is unavailable
 - Unsupported extensions
+
+GitHub Actions runs the complete test suite on both Windows and Linux with Node.js 20 and 22.
+
+## Why This Stands Out
+
+Thunder System Sentinel combines practical system diagnostics, repeatable snapshots, file-integrity monitoring, and deliberately constrained file editing in one dependency-free CLI. Its safety boundaries are backed by deterministic cross-platform tests rather than relying only on lexical path checks or happy-path behavior.
 
 ## Project Structure
 
@@ -314,12 +362,14 @@ thunder-system-sentinel/
 |   |-- fileManager.js
 |   |-- formatter.js
 |   |-- healthAnalyzer.js
+|   |-- integrityManager.js
 |   |-- snapshotManager.js
 |   `-- systemInfo.js
 |-- tests/
 |   |-- fileManager.test.js
 |   |-- formatter.test.js
 |   |-- healthAnalyzer.test.js
+|   |-- integrityManager.test.js
 |   |-- snapshotManager.test.js
 |   `-- systemInfo.test.js
 |-- workspace/

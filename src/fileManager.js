@@ -1,8 +1,10 @@
 import {
   access,
+  lstat,
   mkdir,
   readFile,
   readdir,
+  realpath,
   unlink,
   writeFile,
 } from "node:fs/promises";
@@ -28,7 +30,21 @@ const ALLOWED_EXTENSIONS = new Set([
   ".txt",
 ]);
 
-function resolveSafePath(fileName) {
+function workspaceEscapeError() {
+  return new Error("The file must remain inside the workspace directory.");
+}
+
+function isInsideDirectory(directory, candidate) {
+  const relativePath = path.relative(directory, candidate);
+  return (
+    relativePath === "" ||
+    (!relativePath.startsWith(`..${path.sep}`) &&
+      relativePath !== ".." &&
+      !path.isAbsolute(relativePath))
+  );
+}
+
+function resolveLexicalPath(fileName) {
   if (!fileName?.trim()) {
     throw new Error("A file name is required.");
   }
@@ -49,28 +65,81 @@ function resolveSafePath(fileName) {
     resolvedPath !== WORKSPACE_ROOT &&
     !resolvedPath.startsWith(`${WORKSPACE_ROOT}${path.sep}`)
   ) {
-    throw new Error("The file must remain inside the workspace directory.");
+    throw workspaceEscapeError();
   }
 
   return resolvedPath;
 }
 
+async function findDeepestExistingPath(candidate) {
+  let current = candidate;
+
+  while (true) {
+    try {
+      await lstat(current);
+      return current;
+    } catch (error) {
+      if (error.code !== "ENOENT" && error.code !== "ENOTDIR") {
+        throw error;
+      }
+    }
+
+    const parent = path.dirname(current);
+
+    if (parent === current) {
+      throw workspaceEscapeError();
+    }
+
+    current = parent;
+  }
+}
+
+async function assertRealPathInsideWorkspace(candidate, realWorkspaceRoot) {
+  const existingPath = await findDeepestExistingPath(candidate);
+  let realExistingPath;
+
+  try {
+    realExistingPath = await realpath(existingPath);
+  } catch (error) {
+    if (error.code === "ENOENT" || error.code === "ELOOP") {
+      throw workspaceEscapeError();
+    }
+
+    throw error;
+  }
+
+  if (!isInsideDirectory(realWorkspaceRoot, realExistingPath)) {
+    throw workspaceEscapeError();
+  }
+}
+
+async function resolveSafePath(fileName) {
+  const filePath = resolveLexicalPath(fileName);
+
+  await mkdir(WORKSPACE_ROOT, { recursive: true });
+  const realWorkspaceRoot = await realpath(WORKSPACE_ROOT);
+  await assertRealPathInsideWorkspace(filePath, realWorkspaceRoot);
+
+  return { filePath, realWorkspaceRoot };
+}
+
 export async function createCodeFile(fileName, content = "") {
-  const filePath = resolveSafePath(fileName);
+  const { filePath, realWorkspaceRoot } = await resolveSafePath(fileName);
 
   await mkdir(path.dirname(filePath), { recursive: true });
+  await assertRealPathInsideWorkspace(path.dirname(filePath), realWorkspaceRoot);
   await writeFile(filePath, content, { encoding: "utf8", flag: "wx" });
 
   return `Created: ${fileName}`;
 }
 
 export async function readCodeFile(fileName) {
-  const filePath = resolveSafePath(fileName);
+  const { filePath } = await resolveSafePath(fileName);
   return readFile(filePath, "utf8");
 }
 
 export async function updateCodeFile(fileName, content) {
-  const filePath = resolveSafePath(fileName);
+  const { filePath } = await resolveSafePath(fileName);
 
   await access(filePath);
   await writeFile(filePath, content, "utf8");
@@ -79,7 +148,7 @@ export async function updateCodeFile(fileName, content) {
 }
 
 export async function deleteCodeFile(fileName) {
-  const filePath = resolveSafePath(fileName);
+  const { filePath } = await resolveSafePath(fileName);
 
   await unlink(filePath);
   return `Deleted: ${fileName}`;
@@ -87,19 +156,27 @@ export async function deleteCodeFile(fileName) {
 
 export async function listCodeFiles() {
   await mkdir(WORKSPACE_ROOT, { recursive: true });
+  const realWorkspaceRoot = await realpath(WORKSPACE_ROOT);
 
   const entries = await readdir(WORKSPACE_ROOT, {
     recursive: true,
     withFileTypes: true,
   });
 
-  return entries
-   .filter(
-  (entry) =>
-    entry.isFile() &&
-    ALLOWED_EXTENSIONS.has(path.extname(entry.name).toLowerCase()),
-)
-    .map((entry) =>
-      path.relative(WORKSPACE_ROOT, path.join(entry.parentPath, entry.name)),
-    );
+  const files = [];
+
+  for (const entry of entries) {
+    if (
+      !entry.isFile() ||
+      !ALLOWED_EXTENSIONS.has(path.extname(entry.name).toLowerCase())
+    ) {
+      continue;
+    }
+
+    const absolutePath = path.join(entry.parentPath, entry.name);
+    await assertRealPathInsideWorkspace(absolutePath, realWorkspaceRoot);
+    files.push(path.relative(WORKSPACE_ROOT, absolutePath));
+  }
+
+  return files;
 }
