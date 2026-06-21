@@ -125,7 +125,10 @@ test("formats snapshot show output as text and JSON", () => {
   assert.match(textOutput, /SNAPSHOT REPORT/);
   assert.match(textOutput, /Name: daily/);
   assert.match(textOutput, /Schema version: 1/);
-  assert.match(textOutput, /SYSTEM SENTINEL REPORT/);
+  assert.doesNotMatch(textOutput, /SYSTEM SENTINEL REPORT/);
+  assert.deepEqual(textOutput.match(/^[A-Z ]+ REPORT$/gm), ["SNAPSHOT REPORT"]);
+  assert.match(textOutput, /Operating System/);
+  assert.match(textOutput, /Health Status/);
 
   assert.deepEqual(JSON.parse(formatSnapshot(snapshot, "json")), snapshot);
 });

@@ -1,7 +1,7 @@
 import {
-  access,
   lstat,
   mkdir,
+  open,
   readFile,
   readdir,
   realpath,
@@ -140,9 +140,14 @@ export async function readCodeFile(fileName) {
 
 export async function updateCodeFile(fileName, content) {
   const { filePath } = await resolveSafePath(fileName);
+  const fileHandle = await open(filePath, "r+");
 
-  await access(filePath);
-  await writeFile(filePath, content, "utf8");
+  try {
+    await fileHandle.truncate(0);
+    await fileHandle.writeFile(content, { encoding: "utf8" });
+  } finally {
+    await fileHandle.close();
+  }
 
   return `Updated: ${fileName}`;
 }

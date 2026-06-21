@@ -135,3 +135,21 @@ test("environment collection uses a safe allowlist", () => {
   assert.equal(Object.hasOwn(environment, "API_KEY"), false);
   assert.equal(Object.hasOwn(environment, "PASSWORD"), false);
 });
+
+test("environment collection preserves an existing empty-string value", () => {
+  const variableName = "NODE_ENV";
+  const existed = Object.hasOwn(process.env, variableName);
+  const originalValue = process.env[variableName];
+
+  try {
+    process.env[variableName] = "";
+    const environment = collectEnvironmentVariables();
+    assert.equal(environment[variableName], "");
+  } finally {
+    if (existed) {
+      process.env[variableName] = originalValue;
+    } else {
+      delete process.env[variableName];
+    }
+  }
+});

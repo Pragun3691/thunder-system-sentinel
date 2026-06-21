@@ -14,7 +14,7 @@ export function collectEnvironmentVariables() {
   return Object.fromEntries(
     ALLOWED_VARIABLES.map((name) => [
       name,
-      process.env[name] || "Unavailable",
+      process.env[name] ?? "Unavailable",
     ]),
   );
 }

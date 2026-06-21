@@ -77,15 +77,7 @@ function formatNetworkInterfaces(network) {
   });
 }
 
-export function formatReport(report, format = "text") {
-  if (format === "json") {
-    return JSON.stringify(report, null, 2);
-  }
-
-  if (format !== "text") {
-    throw new Error(`Unsupported output format: ${format}`);
-  }
-
+function formatReportSections(report) {
   const { system, health, environment } = report;
   const loadAverageEntries = [
     [
@@ -102,7 +94,6 @@ export function formatReport(report, format = "text") {
   }
 
   return [
-    "SYSTEM SENTINEL REPORT",
     `Generated at: ${report.generatedAt}`,
     createSection("Operating System", [
       ["Type", system.operatingSystem.type],
@@ -148,7 +139,19 @@ export function formatReport(report, format = "text") {
       "Selected Environment Variables",
       Object.entries(environment),
     ),
-  ].join("\n");
+  ];
+}
+
+export function formatReport(report, format = "text") {
+  if (format === "json") {
+    return JSON.stringify(report, null, 2);
+  }
+
+  if (format !== "text") {
+    throw new Error(`Unsupported output format: ${format}`);
+  }
+
+  return ["SYSTEM SENTINEL REPORT", ...formatReportSections(report)].join("\n");
 }
 
 export function formatSnapshot(snapshot, format = "text") {
@@ -164,7 +167,7 @@ export function formatSnapshot(snapshot, format = "text") {
     "SNAPSHOT REPORT",
     `Name: ${snapshot.name}`,
     `Schema version: ${snapshot.schemaVersion}`,
-    formatReport(snapshot, "text"),
+    ...formatReportSections(snapshot),
   ].join("\n");
 }
 

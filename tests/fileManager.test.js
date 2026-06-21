@@ -68,6 +68,47 @@ test("performs create, read, update, list, and delete operations", async () => {
   }
 });
 
+test("updates an existing file normally", async () => {
+  const fileName = `normal-update-${process.pid}.txt`;
+
+  try {
+    await createCodeFile(fileName, "before");
+    assert.equal(await updateCodeFile(fileName, "after"), `Updated: ${fileName}`);
+    assert.equal(await readCodeFile(fileName), "after");
+  } finally {
+    await deleteCodeFile(fileName).catch(() => {});
+  }
+});
+
+test("replacing long content with shorter content leaves no trailing bytes", async () => {
+  const fileName = `short-update-${process.pid}.txt`;
+  const shorterContent = "short";
+
+  try {
+    await createCodeFile(fileName, "long content that must be fully removed");
+    await updateCodeFile(fileName, shorterContent);
+    assert.equal(await readCodeFile(fileName), shorterContent);
+  } finally {
+    await deleteCodeFile(fileName).catch(() => {});
+  }
+});
+
+test("updating a missing file fails with ENOENT and does not create it", async () => {
+  const fileName = `missing-update-${process.pid}.txt`;
+  const filePath = path.join(workspaceDirectory, fileName);
+
+  await rm(filePath, { force: true });
+
+  try {
+    await assert.rejects(updateCodeFile(fileName, "must not be created"), {
+      code: "ENOENT",
+    });
+    await assert.rejects(access(filePath), { code: "ENOENT" });
+  } finally {
+    await rm(filePath, { force: true });
+  }
+});
+
 test("blocks paths outside the workspace", async () => {
   await assert.rejects(
     readCodeFile("../package.json"),

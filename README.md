@@ -30,7 +30,7 @@ A safe Node.js command-line tool that collects system information, displays sele
 
 ## Requirements
 
-- Node.js 20 or newer
+- Node.js >=20.12.0
 - npm
 - Git
 
@@ -217,6 +217,8 @@ Snapshot writes are atomic: the CLI writes a temporary file in the snapshot dire
 ## Integrity Baselines
 
 `integrity baseline` reads every file in `workspace`, calculates a SHA-256 digest and byte size, and stores the resulting manifest in `.sentinel/integrity/baseline.json`. SHA-256 turns each file's bytes into a stable 256-bit fingerprint: changing the file changes its digest, while the original file contents are not copied into the baseline.
+
+The integrity baseline detects unauthorized file modifications of the kind malware could make, allowing the workspace to be checked for tampering.
 
 The baseline records its schema version, hash algorithm, generation time, file count, and portable relative file paths. It is written atomically through a temporary file and rename; temporary files are cleaned up if writing or renaming fails.
 
