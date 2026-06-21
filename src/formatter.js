@@ -243,3 +243,69 @@ export function formatSnapshotComparison(comparison, format = "text") {
     ...sections,
   ].join("\n");
 }
+
+export function formatIntegrityBaseline(baseline, format = "text") {
+  if (format === "json") {
+    return JSON.stringify(baseline, null, 2);
+  }
+
+  if (format !== "text") {
+    throw new Error(`Unsupported output format: ${format}`);
+  }
+
+  return [
+    "INTEGRITY BASELINE SAVED",
+    `Algorithm: ${baseline.algorithm}`,
+    `Files fingerprinted: ${baseline.fileCount}`,
+    `Generated at: ${baseline.generatedAt}`,
+  ].join("\n");
+}
+
+function formatIntegritySection(title, rows) {
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return [`\n${title}`, "-".repeat(title.length), ...rows].join("\n");
+}
+
+export function formatIntegrityReport(report, format = "text") {
+  if (format === "json") {
+    return JSON.stringify(report, null, 2);
+  }
+
+  if (format !== "text") {
+    throw new Error(`Unsupported output format: ${format}`);
+  }
+
+  const lines = [
+    "INTEGRITY CHECK",
+    `Baseline from: ${report.baselineGeneratedAt}`,
+    `Summary: ${report.summary.unchanged} unchanged, ${report.summary.modified} modified, ${report.summary.added} added, ${report.summary.removed} removed`,
+  ];
+
+  const sections = [
+    formatIntegritySection(
+      "Modified",
+      report.modified.map((change) => `~ ${change.path}`),
+    ),
+    formatIntegritySection(
+      "Added",
+      report.added.map((change) => `+ ${change.path}`),
+    ),
+    formatIntegritySection(
+      "Removed",
+      report.removed.map((change) => `- ${change.path}`),
+    ),
+  ].filter((section) => section !== null);
+
+  for (const section of sections) {
+    lines.push(section);
+  }
+
+  if (!report.hasDrift) {
+    lines.push("\nNo changes detected. All files match the baseline.");
+  }
+
+  return lines.join("\n");
+}

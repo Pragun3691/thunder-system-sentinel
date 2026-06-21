@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  formatIntegrityBaseline,
+  formatIntegrityReport,
   formatReport,
   formatSnapshot,
   formatSnapshotComparison,
@@ -197,4 +199,59 @@ test("formats no-difference snapshot comparisons clearly", () => {
     ),
     "No differences found between first and second.",
   );
+});
+
+test("formats an integrity baseline summary", () => {
+  const baseline = {
+    schemaVersion: 1,
+    algorithm: "sha256",
+    generatedAt: "2026-06-20T00:00:00.000Z",
+    fileCount: 2,
+    files: {},
+  };
+
+  const text = formatIntegrityBaseline(baseline, "text");
+  assert.match(text, /INTEGRITY BASELINE SAVED/);
+  assert.match(text, /Algorithm: sha256/);
+  assert.match(text, /Files fingerprinted: 2/);
+
+  assert.deepEqual(JSON.parse(formatIntegrityBaseline(baseline, "json")), baseline);
+});
+
+test("formats an integrity check report with drift", () => {
+  const report = {
+    baselineGeneratedAt: "2026-06-20T00:00:00.000Z",
+    algorithm: "sha256",
+    summary: { added: 1, removed: 1, modified: 1, unchanged: 2 },
+    added: [{ path: "new.txt", sha256: "a".repeat(64) }],
+    removed: [{ path: "old.txt", sha256: "b".repeat(64) }],
+    modified: [{ path: "a.txt", before: "c".repeat(64), after: "d".repeat(64) }],
+    unchanged: [{ path: "keep1.txt" }, { path: "keep2.txt" }],
+    hasDrift: true,
+  };
+
+  const text = formatIntegrityReport(report, "text");
+  assert.match(text, /INTEGRITY CHECK/);
+  assert.match(text, /2 unchanged, 1 modified, 1 added, 1 removed/);
+  assert.match(text, /~ a\.txt/);
+  assert.match(text, /\+ new\.txt/);
+  assert.match(text, /- old\.txt/);
+
+  assert.deepEqual(JSON.parse(formatIntegrityReport(report, "json")), report);
+});
+
+test("formats a clean integrity check report", () => {
+  const report = {
+    baselineGeneratedAt: "2026-06-20T00:00:00.000Z",
+    algorithm: "sha256",
+    summary: { added: 0, removed: 0, modified: 0, unchanged: 3 },
+    added: [],
+    removed: [],
+    modified: [],
+    unchanged: [{ path: "a.txt" }, { path: "b.txt" }, { path: "c.txt" }],
+    hasDrift: false,
+  };
+
+  const text = formatIntegrityReport(report, "text");
+  assert.match(text, /No changes detected/);
 });

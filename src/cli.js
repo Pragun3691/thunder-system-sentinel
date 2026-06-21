@@ -12,6 +12,10 @@ import {
   loadSnapshot,
 } from "./snapshotManager.js";
 import {
+  checkIntegrity,
+  saveBaseline,
+} from "./integrityManager.js";
+import {
   createCodeFile,
   deleteCodeFile,
   listCodeFiles,
@@ -19,6 +23,8 @@ import {
   updateCodeFile,
 } from "./fileManager.js";
 import {
+  formatIntegrityBaseline,
+  formatIntegrityReport,
   formatReport,
   formatSnapshot,
   formatSnapshotComparison,
@@ -37,6 +43,8 @@ Usage:
   npm start -- snapshot show <name>
   npm start -- snapshot compare <firstName> <secondName>
   npm start -- snapshot delete <name>
+  npm start -- integrity baseline
+  npm start -- integrity check
   npm start -- create <file> --content "<code>"
   npm start -- read <file>
   npm start -- update <file> --content "<code>"
@@ -159,6 +167,28 @@ async function handleSnapshotCommand(action, firstName, secondName, format) {
   }
 }
 
+async function handleIntegrityCommand(action, format) {
+  switch (action) {
+    case "baseline":
+      console.log(formatIntegrityBaseline(await saveBaseline(), format));
+      break;
+
+    case "check": {
+      const report = await checkIntegrity();
+      console.log(formatIntegrityReport(report, format));
+
+      if (report.hasDrift) {
+        process.exitCode = 1;
+      }
+
+      break;
+    }
+
+    default:
+      throw new Error(`Unknown integrity command: ${action ?? "none"}`);
+  }
+}
+
 async function main() {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
@@ -197,6 +227,10 @@ async function main() {
 
     case "snapshot":
       await handleSnapshotCommand(firstArg, secondArg, thirdArg, values.format);
+      break;
+
+    case "integrity":
+      await handleIntegrityCommand(firstArg, values.format);
       break;
 
     case "create":
@@ -246,9 +280,10 @@ async function main() {
 try {
   await main();
 } catch (error) {
-  const isSnapshotError = error.isSnapshotError === true;
+  const isFriendlyError =
+    error.isSnapshotError === true || error.isIntegrityError === true;
 
-  if (isSnapshotError) {
+  if (isFriendlyError) {
     console.error(`Error: ${error.message}`);
   } else if (error.code === "ENOENT") {
     console.error("Error: The requested file does not exist.");
